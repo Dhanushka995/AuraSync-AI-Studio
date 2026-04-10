@@ -1,0 +1,5 @@
+customtkinter
+requests
+pydub
+pygame
+pillow
