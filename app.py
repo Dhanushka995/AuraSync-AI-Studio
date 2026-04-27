@@ -42,10 +42,10 @@ class AuraSyncStudio(ctk.CTk):
         ctk.CTkLabel(self.left_frame, text="AI Music Prompt:").pack(anchor="w", padx=20, pady=(10, 0))
         self.txt_prompt = ctk.CTkTextbox(self.left_frame, height=100)
         self.txt_prompt.pack(padx=20, pady=5, fill="x")
-        self.txt_prompt.insert("0.0", "Sri Lankan Baila, upbeat, acoustic guitar")
+        self.txt_prompt.insert("0.0", "EDM, heavy bass, club dance vibe")
 
         ctk.CTkLabel(self.left_frame, text="Genre:").pack(anchor="w", padx=20, pady=(10, 0))
-        self.combo_genre = ctk.CTkComboBox(self.left_frame, values=["Baila", "Pop", "Classical", "EDM", "Rock", "Acoustic"])
+        self.combo_genre = ctk.CTkComboBox(self.left_frame, values=["EDM", "Baila", "Pop", "Classical", "Rock", "Acoustic"])
         self.combo_genre.pack(padx=20, pady=5, fill="x")
 
         ctk.CTkLabel(self.left_frame, text="Mood:").pack(anchor="w", padx=20, pady=(10, 0))
@@ -112,7 +112,7 @@ class AuraSyncStudio(ctk.CTk):
     def open_api_settings(self):
         api_window = ctk.CTkToplevel(self)
         api_window.title("Pro API Configuration")
-        api_window.geometry("650x600") # Increased height slightly
+        api_window.geometry("650x600")
         api_window.attributes("-topmost", True)
 
         tabview = ctk.CTkTabview(api_window, width=600, height=500)
@@ -147,7 +147,7 @@ class AuraSyncStudio(ctk.CTk):
         btn_test_llm = ctk.CTkButton(tab_llm, text="🔌 Test Connection", fg_color="#1f538d", command=self.test_llm_connection)
         btn_test_llm.pack(pady=10)
 
-        # --- HUGGING FACE TAB (UPDATED) ---
+        # --- HUGGING FACE TAB ---
         ctk.CTkLabel(tab_hf, text="Hugging Face Token Pool (For MusicGen):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
         self.txt_hf_keys = ctk.CTkTextbox(tab_hf, height=80)
         self.txt_hf_keys.pack(padx=10, pady=5, fill="x")
@@ -155,7 +155,6 @@ class AuraSyncStudio(ctk.CTk):
         self.lbl_hf_status = ctk.CTkLabel(tab_hf, text="Waiting for Tokens...", text_color="orange", font=ctk.CTkFont(weight="bold"))
         self.lbl_hf_status.pack(pady=5)
 
-        # New: HF Model Selection
         ctk.CTkLabel(tab_hf, text="Audio Model Preset:").pack(anchor="w", padx=10, pady=(5, 0))
         self.combo_hf_model = ctk.CTkComboBox(tab_hf, values=["MusicGen Melody (Best for Vocals)", "MusicGen Large (High Quality)", "MusicGen Small (Fast)", "Custom Model ID"], command=self.on_hf_model_change)
         self.combo_hf_model.pack(padx=10, pady=5, fill="x")
@@ -173,57 +172,84 @@ class AuraSyncStudio(ctk.CTk):
         # Save Button
         ctk.CTkButton(api_window, text="💾 Save All Settings", fg_color="#28a745", hover_color="#218838", height=40, command=lambda: self.save_api_settings(api_window)).pack(pady=10)
 
+        # Load settings WITHOUT overwriting them!
         self.load_api_settings()
-        self.on_provider_change(self.combo_provider.get())
-        self.on_hf_model_change(self.combo_hf_model.get())
 
     def on_provider_change(self, choice):
-        self.entry_base_url.configure(state="normal")
-        self.entry_model.configure(state="normal")
+        self.entry_base_url.delete(0, "end")
+        self.entry_model.delete(0, "end")
         
         if choice == "Groq":
-            self.entry_base_url.delete(0, "end")
             self.entry_base_url.insert(0, "https://api.groq.com/openai/v1/chat/completions")
-            self.entry_model.delete(0, "end")
             self.entry_model.insert(0, "llama3-8b-8192")
         elif choice == "NVIDIA Build":
-            self.entry_base_url.delete(0, "end")
             self.entry_base_url.insert(0, "https://integrate.api.nvidia.com/v1/chat/completions")
-            self.entry_model.delete(0, "end")
             self.entry_model.insert(0, "meta/llama3-8b-instruct")
         elif choice == "OpenRouter":
-            self.entry_base_url.delete(0, "end")
             self.entry_base_url.insert(0, "https://openrouter.ai/api/v1/chat/completions")
-            self.entry_model.delete(0, "end")
             self.entry_model.insert(0, "meta-llama/llama-3-8b-instruct:free")
 
     def on_hf_model_change(self, choice):
-        self.entry_hf_model.configure(state="normal")
+        self.entry_hf_model.delete(0, "end")
         if choice == "MusicGen Melody (Best for Vocals)":
-            self.entry_hf_model.delete(0, "end")
             self.entry_hf_model.insert(0, "facebook/musicgen-melody")
         elif choice == "MusicGen Large (High Quality)":
-            self.entry_hf_model.delete(0, "end")
             self.entry_hf_model.insert(0, "facebook/musicgen-large")
         elif choice == "MusicGen Small (Fast)":
-            self.entry_hf_model.delete(0, "end")
             self.entry_hf_model.insert(0, "facebook/musicgen-small")
 
+    # --- REAL API TESTING LOGIC ---
     def test_llm_connection(self):
-        self.lbl_llm_status.configure(text="Testing...", text_color="yellow")
+        self.lbl_llm_status.configure(text="Testing Connection... Please wait.", text_color="yellow")
+        threading.Thread(target=self._run_llm_test).start()
+
+    def _run_llm_test(self):
         keys = self.txt_llm_keys.get("0.0", "end").strip().split('\n')
-        if keys and keys[0]:
-            self.lbl_llm_status.configure(text="✅ Connection Successful (Key 1)", text_color="#28a745")
-        else:
-            self.lbl_llm_status.configure(text="❌ No Keys Found", text_color="red")
+        api_key = keys[0].strip() if keys else ""
+        if not api_key:
+            self.lbl_llm_status.configure(text="❌ Error: No API Key Found", text_color="red")
+            return
+        
+        url = self.entry_base_url.get()
+        model = self.entry_model.get()
+        
+        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+        payload = {"model": model, "messages":[{"role": "user", "content": "Hi"}], "max_tokens": 5}
+        
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=10)
+            if response.status_code == 200:
+                self.lbl_llm_status.configure(text="✅ Connection Successful! Key is working.", text_color="#28a745")
+            else:
+                self.lbl_llm_status.configure(text=f"❌ API Error: {response.status_code} - Check Key or Model", text_color="red")
+        except Exception as e:
+            self.lbl_llm_status.configure(text="❌ Network Error: Check Base URL", text_color="red")
 
     def test_hf_connection(self):
-        self.lbl_hf_status.configure(text="Testing...", text_color="yellow")
+        self.lbl_hf_status.configure(text="Testing Connection... Please wait.", text_color="yellow")
+        threading.Thread(target=self._run_hf_test).start()
+
+    def _run_hf_test(self):
         keys = self.txt_hf_keys.get("0.0", "end").strip().split('\n')
-        if keys and keys[0]:
-            self.lbl_hf_status.configure(text="✅ HF Token Valid", text_color="#28a745")
-        else:
-            self.lbl_hf_status.configure(text="❌ No Tokens Found", text_color="red")
+        api_key = keys[0].strip() if keys else ""
+        if not api_key:
+            self.lbl_hf_status.configure(text="❌ Error: No Token Found", text_color="red")
+            return
+        
+        model_id = self.entry_hf_model.get()
+        url = f"https://api-inference.huggingface.co/models/{model_id}"
+        headers = {"Authorization": f"Bearer {api_key}"}
+        
+        try:
+            response = requests.get(url, headers=headers, timeout=10)
+            if response.status_code == 200:
+                self.lbl_hf_status.configure(text="✅ HF Token Valid & Model Ready!", text_color="#28a745")
+            elif response.status_code == 503:
+                self.lbl_hf_status.configure(text="✅ Token Valid (Model is currently loading)", text_color="#28a745")
+            else:
+                self.lbl_hf_status.configure(text=f"❌ API Error: {response.status_code} - Check Token", text_color="red")
+        except Exception as e:
+            self.lbl_hf_status.configure(text="❌ Network Error", text_color="red")
 
     def save_api_settings(self, window):
         data = {
@@ -245,11 +271,22 @@ class AuraSyncStudio(ctk.CTk):
                 data = json.load(f)
                 self.txt_llm_keys.insert("0.0", data.get("llm_keys", ""))
                 self.combo_provider.set(data.get("provider", "Groq"))
+                
+                self.entry_base_url.delete(0, "end")
                 self.entry_base_url.insert(0, data.get("base_url", ""))
+                
+                self.entry_model.delete(0, "end")
                 self.entry_model.insert(0, data.get("model_name", ""))
+                
                 self.txt_hf_keys.insert("0.0", data.get("hf_keys", ""))
                 self.combo_hf_model.set(data.get("hf_preset", "MusicGen Melody (Best for Vocals)"))
+                
+                self.entry_hf_model.delete(0, "end")
                 self.entry_hf_model.insert(0, data.get("hf_model_id", "facebook/musicgen-melody"))
+        else:
+            # Load defaults if no save file exists
+            self.on_provider_change("Groq")
+            self.on_hf_model_change("MusicGen Melody (Best for Vocals)")
 
     # --- GENERATION LOGIC ---
     def start_generation(self):
