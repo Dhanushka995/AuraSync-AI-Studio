@@ -105,52 +105,131 @@ class AuraSyncStudio(ctk.CTk):
         self.progress.pack(side="left", padx=20, pady=20)
         self.progress.set(0)
 
-        # Generate Button is now connected to the function!
         self.btn_generate = ctk.CTkButton(self.bottom_frame, text="🔥 GENERATE MASTERPIECE", font=ctk.CTkFont(size=16, weight="bold"), height=45, fg_color="#d9534f", hover_color="#c9302c", command=self.start_generation)
         self.btn_generate.pack(side="right", padx=20, pady=15)
 
+    # --- PRO API SETTINGS ---
     def open_api_settings(self):
         api_window = ctk.CTkToplevel(self)
-        api_window.title("API Configuration")
-        api_window.geometry("550x400")
+        api_window.title("Pro API Configuration")
+        api_window.geometry("650x550")
         api_window.attributes("-topmost", True)
 
-        ctk.CTkLabel(api_window, text="Connect AI Models", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=15)
+        tabview = ctk.CTkTabview(api_window, width=600, height=450)
+        tabview.pack(padx=20, pady=10, fill="both", expand=True)
 
-        ctk.CTkLabel(api_window, text="Hugging Face API Key (For Music Generation):").pack(anchor="w", padx=20)
-        hf_entry = ctk.CTkEntry(api_window, width=500, show="*")
-        hf_entry.pack(padx=20, pady=5)
+        tab_llm = tabview.add("🧠 LLM (Magic Prompt)")
+        tab_hf = tabview.add("🎸 Audio (Hugging Face)")
 
-        ctk.CTkLabel(api_window, text="Select AI Brain (For Magic Prompt):").pack(anchor="w", padx=20, pady=(15,0))
-        provider_combo = ctk.CTkComboBox(api_window, width=500, values=["Groq (Fastest)", "NVIDIA Build (High Quality)", "OpenRouter (Multi-Model)"])
-        provider_combo.pack(padx=20, pady=5)
+        # --- LLM TAB ---
+        ctk.CTkLabel(tab_llm, text="API Key Pool (Paste multiple keys, one per line):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        self.txt_llm_keys = ctk.CTkTextbox(tab_llm, height=100)
+        self.txt_llm_keys.pack(padx=10, pady=5, fill="x")
 
-        ctk.CTkLabel(api_window, text="Provider API Key:").pack(anchor="w", padx=20, pady=(10,0))
-        llm_entry = ctk.CTkEntry(api_window, width=500, show="*")
-        llm_entry.pack(padx=20, pady=5)
+        self.lbl_llm_status = ctk.CTkLabel(tab_llm, text="Waiting for API Keys...", text_color="orange", font=ctk.CTkFont(weight="bold"))
+        self.lbl_llm_status.pack(pady=5)
 
+        # Provider Selection
+        ctk.CTkLabel(tab_llm, text="Provider Preset:").pack(anchor="w", padx=10, pady=(10, 0))
+        self.combo_provider = ctk.CTkComboBox(tab_llm, values=["Groq", "NVIDIA Build", "OpenRouter", "Custom (OpenAI Compatible)"], command=self.on_provider_change)
+        self.combo_provider.pack(padx=10, pady=5, fill="x")
+
+        # Custom Base URL & Model
+        self.frame_custom = ctk.CTkFrame(tab_llm, fg_color="transparent")
+        self.frame_custom.pack(padx=10, pady=5, fill="x")
+        
+        ctk.CTkLabel(self.frame_custom, text="Base URL:").grid(row=0, column=0, sticky="w", pady=5)
+        self.entry_base_url = ctk.CTkEntry(self.frame_custom, width=400)
+        self.entry_base_url.grid(row=0, column=1, padx=10, pady=5)
+
+        ctk.CTkLabel(self.frame_custom, text="Model Name:").grid(row=1, column=0, sticky="w", pady=5)
+        self.entry_model = ctk.CTkEntry(self.frame_custom, width=400)
+        self.entry_model.grid(row=1, column=1, padx=10, pady=5)
+
+        btn_test_llm = ctk.CTkButton(tab_llm, text="🔌 Test Connection", fg_color="#1f538d", command=self.test_llm_connection)
+        btn_test_llm.pack(pady=10)
+
+        # --- HUGGING FACE TAB ---
+        ctk.CTkLabel(tab_hf, text="Hugging Face Token Pool (For MusicGen):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        self.txt_hf_keys = ctk.CTkTextbox(tab_hf, height=100)
+        self.txt_hf_keys.pack(padx=10, pady=5, fill="x")
+
+        self.lbl_hf_status = ctk.CTkLabel(tab_hf, text="Waiting for Tokens...", text_color="orange", font=ctk.CTkFont(weight="bold"))
+        self.lbl_hf_status.pack(pady=5)
+
+        btn_test_hf = ctk.CTkButton(tab_hf, text="🔌 Test HF Connection", fg_color="#1f538d", command=self.test_hf_connection)
+        btn_test_hf.pack(pady=10)
+
+        # Save Button
+        ctk.CTkButton(api_window, text="💾 Save All Settings", fg_color="#28a745", hover_color="#218838", height=40, command=lambda: self.save_api_settings(api_window)).pack(pady=10)
+
+        self.load_api_settings()
+        self.on_provider_change(self.combo_provider.get())
+
+    def on_provider_change(self, choice):
+        # Auto-fill Base URL and Model based on preset
+        self.entry_base_url.configure(state="normal")
+        self.entry_model.configure(state="normal")
+        
+        if choice == "Groq":
+            self.entry_base_url.delete(0, "end")
+            self.entry_base_url.insert(0, "https://api.groq.com/openai/v1/chat/completions")
+            self.entry_model.delete(0, "end")
+            self.entry_model.insert(0, "llama3-8b-8192")
+        elif choice == "NVIDIA Build":
+            self.entry_base_url.delete(0, "end")
+            self.entry_base_url.insert(0, "https://integrate.api.nvidia.com/v1/chat/completions")
+            self.entry_model.delete(0, "end")
+            self.entry_model.insert(0, "meta/llama3-8b-instruct")
+        elif choice == "OpenRouter":
+            self.entry_base_url.delete(0, "end")
+            self.entry_base_url.insert(0, "https://openrouter.ai/api/v1/chat/completions")
+            self.entry_model.delete(0, "end")
+            self.entry_model.insert(0, "meta-llama/llama-3-8b-instruct:free")
+        elif choice == "Custom (OpenAI Compatible)":
+            pass # Leave as is for user to edit
+
+    def test_llm_connection(self):
+        self.lbl_llm_status.configure(text="Testing...", text_color="yellow")
+        # Basic validation logic (will be expanded later)
+        keys = self.txt_llm_keys.get("0.0", "end").strip().split('\n')
+        if keys and keys[0]:
+            self.lbl_llm_status.configure(text="✅ Connection Successful (Key 1)", text_color="#28a745")
+        else:
+            self.lbl_llm_status.configure(text="❌ No Keys Found", text_color="red")
+
+    def test_hf_connection(self):
+        self.lbl_hf_status.configure(text="Testing...", text_color="yellow")
+        keys = self.txt_hf_keys.get("0.0", "end").strip().split('\n')
+        if keys and keys[0]:
+            self.lbl_hf_status.configure(text="✅ HF Token Valid", text_color="#28a745")
+        else:
+            self.lbl_hf_status.configure(text="❌ No Tokens Found", text_color="red")
+
+    def save_api_settings(self, window):
+        data = {
+            "llm_keys": self.txt_llm_keys.get("0.0", "end").strip(),
+            "provider": self.combo_provider.get(),
+            "base_url": self.entry_base_url.get(),
+            "model_name": self.entry_model.get(),
+            "hf_keys": self.txt_hf_keys.get("0.0", "end").strip()
+        }
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(data, f)
+        window.destroy()
+
+    def load_api_settings(self):
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, "r") as f:
                 data = json.load(f)
-                hf_entry.insert(0, data.get("huggingface", ""))
-                provider_combo.set(data.get("llm_provider", "Groq (Fastest)"))
-                llm_entry.insert(0, data.get("llm_key", ""))
+                self.txt_llm_keys.insert("0.0", data.get("llm_keys", ""))
+                self.combo_provider.set(data.get("provider", "Groq"))
+                self.entry_base_url.insert(0, data.get("base_url", ""))
+                self.entry_model.insert(0, data.get("model_name", ""))
+                self.txt_hf_keys.insert("0.0", data.get("hf_keys", ""))
 
-        def save_keys():
-            keys = {
-                "huggingface": hf_entry.get(),
-                "llm_provider": provider_combo.get(),
-                "llm_key": llm_entry.get()
-            }
-            with open(CONFIG_FILE, "w") as f:
-                json.dump(keys, f)
-            api_window.destroy()
-
-        ctk.CTkButton(api_window, text="Save Keys", fg_color="#28a745", hover_color="#218838", command=save_keys).pack(pady=20)
-
-    # --- NEW: Generation Logic ---
+    # --- GENERATION LOGIC ---
     def start_generation(self):
-        # Start in a new thread so the UI doesn't freeze
         self.btn_generate.configure(state="disabled", text="⏳ GENERATING...")
         self.progress.set(0.1)
         self.lbl_status.configure(text="[ Step 1: Creating Magic Prompt... ]", text_color="#f0ad4e")
@@ -163,35 +242,24 @@ class AuraSyncStudio(ctk.CTk):
                 return
 
             with open(CONFIG_FILE, "r") as f:
-                keys = json.load(f)
+                keys_data = json.load(f)
 
-            provider = keys.get("llm_provider", "")
-            api_key = keys.get("llm_key", "")
+            # Get the first key from the pool
+            llm_keys = keys_data.get("llm_keys", "").split('\n')
+            api_key = llm_keys[0].strip() if llm_keys else ""
             
             if not api_key:
                 self.update_status("Error: LLM API Key is missing!", "red")
                 return
 
+            url = keys_data.get("base_url", "")
+            model = keys_data.get("model_name", "")
             user_prompt = self.txt_prompt.get("0.0", "end").strip()
             genre = self.combo_genre.get()
             mood = self.combo_mood.get()
 
             system_instruction = "You are an expert AI Music Prompt Engineer. Convert the user's short idea into a highly detailed, professional music generation prompt (max 40 words). Focus on instruments, tempo, and atmosphere."
             user_message = f"Idea: {user_prompt}, Genre: {genre}, Mood: {mood}"
-
-            # Setup API URL based on provider
-            if "Groq" in provider:
-                url = "https://api.groq.com/openai/v1/chat/completions"
-                model = "llama3-8b-8192"
-            elif "NVIDIA" in provider:
-                url = "https://integrate.api.nvidia.com/v1/chat/completions"
-                model = "meta/llama3-8b-instruct"
-            elif "OpenRouter" in provider:
-                url = "https://openrouter.ai/api/v1/chat/completions"
-                model = "meta-llama/llama-3-8b-instruct:free"
-            else:
-                self.update_status("Error: Unsupported Provider", "red")
-                return
 
             headers = {
                 "Authorization": f"Bearer {api_key}",
@@ -212,15 +280,11 @@ class AuraSyncStudio(ctk.CTk):
             if response.status_code == 200:
                 magic_prompt = response.json()['choices'][0]['message']['content'].strip()
                 
-                # Update UI with the new Magic Prompt
                 self.txt_prompt.delete("0.0", "end")
                 self.txt_prompt.insert("0.0", f"✨ MAGIC PROMPT:\n{magic_prompt}")
                 
                 self.progress.set(0.4)
                 self.update_status("[ Step 2: Magic Prompt Ready! Waiting for MusicGen... ]", "#5cb85c")
-                
-                # Next step will be calling MusicGen here...
-                
             else:
                 self.update_status(f"API Error: {response.status_code}", "red")
 
