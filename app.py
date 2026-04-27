@@ -121,7 +121,9 @@ class AuraSyncStudio(ctk.CTk):
         tab_llm = tabview.add("🧠 LLM (Magic Prompt)")
         tab_hf = tabview.add("🎸 Audio (Hugging Face)")
 
+        # ==========================================
         # --- LLM TAB ---
+        # ==========================================
         ctk.CTkLabel(tab_llm, text="API Key Pool (Paste multiple keys, one per line):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
         self.txt_llm_keys = ctk.CTkTextbox(tab_llm, height=80)
         self.txt_llm_keys.pack(padx=10, pady=5, fill="x")
@@ -147,7 +149,9 @@ class AuraSyncStudio(ctk.CTk):
         btn_test_llm = ctk.CTkButton(tab_llm, text="🔌 Test Connection", fg_color="#1f538d", command=self.test_llm_connection)
         btn_test_llm.pack(pady=10)
 
-        # --- HUGGING FACE TAB ---
+        # ==========================================
+        # --- HUGGING FACE TAB (FULLY UPDATED) ---
+        # ==========================================
         ctk.CTkLabel(tab_hf, text="Hugging Face Token Pool (For MusicGen):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
         self.txt_hf_keys = ctk.CTkTextbox(tab_hf, height=80)
         self.txt_hf_keys.pack(padx=10, pady=5, fill="x")
@@ -162,9 +166,15 @@ class AuraSyncStudio(ctk.CTk):
         self.frame_hf_custom = ctk.CTkFrame(tab_hf, fg_color="transparent")
         self.frame_hf_custom.pack(padx=10, pady=5, fill="x")
         
-        ctk.CTkLabel(self.frame_hf_custom, text="HF Model ID:").grid(row=0, column=0, sticky="w", pady=5)
+        # NEW: Base URL for Hugging Face
+        ctk.CTkLabel(self.frame_hf_custom, text="Base URL:").grid(row=0, column=0, sticky="w", pady=5)
+        self.entry_hf_base_url = ctk.CTkEntry(self.frame_hf_custom, width=400)
+        self.entry_hf_base_url.grid(row=0, column=1, padx=10, pady=5)
+
+        # NEW: Model Name for Hugging Face
+        ctk.CTkLabel(self.frame_hf_custom, text="Model Name:").grid(row=1, column=0, sticky="w", pady=5)
         self.entry_hf_model = ctk.CTkEntry(self.frame_hf_custom, width=400)
-        self.entry_hf_model.grid(row=0, column=1, padx=10, pady=5)
+        self.entry_hf_model.grid(row=1, column=1, padx=10, pady=5)
 
         btn_test_hf = ctk.CTkButton(tab_hf, text="🔌 Test HF Connection", fg_color="#1f538d", command=self.test_hf_connection)
         btn_test_hf.pack(pady=10)
@@ -190,6 +200,9 @@ class AuraSyncStudio(ctk.CTk):
             self.entry_model.insert(0, "meta-llama/llama-3-8b-instruct:free")
 
     def on_hf_model_change(self, choice):
+        self.entry_hf_base_url.delete(0, "end")
+        self.entry_hf_base_url.insert(0, "https://api-inference.huggingface.co/models/")
+        
         self.entry_hf_model.delete(0, "end")
         if choice == "MusicGen Melody (Best for Vocals)":
             self.entry_hf_model.insert(0, "facebook/musicgen-melody")
@@ -236,8 +249,11 @@ class AuraSyncStudio(ctk.CTk):
             self.lbl_hf_status.configure(text="❌ Error: No Token Found", text_color="red")
             return
         
-        model_id = self.entry_hf_model.get()
-        url = f"https://api-inference.huggingface.co/models/{model_id}"
+        # Now using both Base URL and Model Name for HF!
+        base_url = self.entry_hf_base_url.get().rstrip('/')
+        model_id = self.entry_hf_model.get().lstrip('/')
+        url = f"{base_url}/{model_id}"
+        
         headers = {"Authorization": f"Bearer {api_key}"}
         
         try:
@@ -249,7 +265,7 @@ class AuraSyncStudio(ctk.CTk):
             else:
                 self.lbl_hf_status.configure(text=f"❌ API Error: {response.status_code} - Check Token", text_color="red")
         except Exception as e:
-            self.lbl_hf_status.configure(text="❌ Network Error", text_color="red")
+            self.lbl_hf_status.configure(text="❌ Network Error: Check Base URL", text_color="red")
 
     def save_api_settings(self, window):
         data = {
@@ -259,6 +275,7 @@ class AuraSyncStudio(ctk.CTk):
             "model_name": self.entry_model.get(),
             "hf_keys": self.txt_hf_keys.get("0.0", "end").strip(),
             "hf_preset": self.combo_hf_model.get(),
+            "hf_base_url": self.entry_hf_base_url.get(),
             "hf_model_id": self.entry_hf_model.get()
         }
         with open(CONFIG_FILE, "w") as f:
@@ -281,6 +298,9 @@ class AuraSyncStudio(ctk.CTk):
                 self.txt_hf_keys.insert("0.0", data.get("hf_keys", ""))
                 self.combo_hf_model.set(data.get("hf_preset", "MusicGen Melody (Best for Vocals)"))
                 
+                self.entry_hf_base_url.delete(0, "end")
+                self.entry_hf_base_url.insert(0, data.get("hf_base_url", "https://api-inference.huggingface.co/models/"))
+
                 self.entry_hf_model.delete(0, "end")
                 self.entry_hf_model.insert(0, data.get("hf_model_id", "facebook/musicgen-melody"))
         else:
