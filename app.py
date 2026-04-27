@@ -112,10 +112,10 @@ class AuraSyncStudio(ctk.CTk):
     def open_api_settings(self):
         api_window = ctk.CTkToplevel(self)
         api_window.title("Pro API Configuration")
-        api_window.geometry("650x550")
+        api_window.geometry("650x600") # Increased height slightly
         api_window.attributes("-topmost", True)
 
-        tabview = ctk.CTkTabview(api_window, width=600, height=450)
+        tabview = ctk.CTkTabview(api_window, width=600, height=500)
         tabview.pack(padx=20, pady=10, fill="both", expand=True)
 
         tab_llm = tabview.add("🧠 LLM (Magic Prompt)")
@@ -123,18 +123,16 @@ class AuraSyncStudio(ctk.CTk):
 
         # --- LLM TAB ---
         ctk.CTkLabel(tab_llm, text="API Key Pool (Paste multiple keys, one per line):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
-        self.txt_llm_keys = ctk.CTkTextbox(tab_llm, height=100)
+        self.txt_llm_keys = ctk.CTkTextbox(tab_llm, height=80)
         self.txt_llm_keys.pack(padx=10, pady=5, fill="x")
 
         self.lbl_llm_status = ctk.CTkLabel(tab_llm, text="Waiting for API Keys...", text_color="orange", font=ctk.CTkFont(weight="bold"))
         self.lbl_llm_status.pack(pady=5)
 
-        # Provider Selection
-        ctk.CTkLabel(tab_llm, text="Provider Preset:").pack(anchor="w", padx=10, pady=(10, 0))
+        ctk.CTkLabel(tab_llm, text="Provider Preset:").pack(anchor="w", padx=10, pady=(5, 0))
         self.combo_provider = ctk.CTkComboBox(tab_llm, values=["Groq", "NVIDIA Build", "OpenRouter", "Custom (OpenAI Compatible)"], command=self.on_provider_change)
         self.combo_provider.pack(padx=10, pady=5, fill="x")
 
-        # Custom Base URL & Model
         self.frame_custom = ctk.CTkFrame(tab_llm, fg_color="transparent")
         self.frame_custom.pack(padx=10, pady=5, fill="x")
         
@@ -149,13 +147,25 @@ class AuraSyncStudio(ctk.CTk):
         btn_test_llm = ctk.CTkButton(tab_llm, text="🔌 Test Connection", fg_color="#1f538d", command=self.test_llm_connection)
         btn_test_llm.pack(pady=10)
 
-        # --- HUGGING FACE TAB ---
+        # --- HUGGING FACE TAB (UPDATED) ---
         ctk.CTkLabel(tab_hf, text="Hugging Face Token Pool (For MusicGen):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
-        self.txt_hf_keys = ctk.CTkTextbox(tab_hf, height=100)
+        self.txt_hf_keys = ctk.CTkTextbox(tab_hf, height=80)
         self.txt_hf_keys.pack(padx=10, pady=5, fill="x")
 
         self.lbl_hf_status = ctk.CTkLabel(tab_hf, text="Waiting for Tokens...", text_color="orange", font=ctk.CTkFont(weight="bold"))
         self.lbl_hf_status.pack(pady=5)
+
+        # New: HF Model Selection
+        ctk.CTkLabel(tab_hf, text="Audio Model Preset:").pack(anchor="w", padx=10, pady=(5, 0))
+        self.combo_hf_model = ctk.CTkComboBox(tab_hf, values=["MusicGen Melody (Best for Vocals)", "MusicGen Large (High Quality)", "MusicGen Small (Fast)", "Custom Model ID"], command=self.on_hf_model_change)
+        self.combo_hf_model.pack(padx=10, pady=5, fill="x")
+
+        self.frame_hf_custom = ctk.CTkFrame(tab_hf, fg_color="transparent")
+        self.frame_hf_custom.pack(padx=10, pady=5, fill="x")
+        
+        ctk.CTkLabel(self.frame_hf_custom, text="HF Model ID:").grid(row=0, column=0, sticky="w", pady=5)
+        self.entry_hf_model = ctk.CTkEntry(self.frame_hf_custom, width=400)
+        self.entry_hf_model.grid(row=0, column=1, padx=10, pady=5)
 
         btn_test_hf = ctk.CTkButton(tab_hf, text="🔌 Test HF Connection", fg_color="#1f538d", command=self.test_hf_connection)
         btn_test_hf.pack(pady=10)
@@ -165,9 +175,9 @@ class AuraSyncStudio(ctk.CTk):
 
         self.load_api_settings()
         self.on_provider_change(self.combo_provider.get())
+        self.on_hf_model_change(self.combo_hf_model.get())
 
     def on_provider_change(self, choice):
-        # Auto-fill Base URL and Model based on preset
         self.entry_base_url.configure(state="normal")
         self.entry_model.configure(state="normal")
         
@@ -186,12 +196,21 @@ class AuraSyncStudio(ctk.CTk):
             self.entry_base_url.insert(0, "https://openrouter.ai/api/v1/chat/completions")
             self.entry_model.delete(0, "end")
             self.entry_model.insert(0, "meta-llama/llama-3-8b-instruct:free")
-        elif choice == "Custom (OpenAI Compatible)":
-            pass # Leave as is for user to edit
+
+    def on_hf_model_change(self, choice):
+        self.entry_hf_model.configure(state="normal")
+        if choice == "MusicGen Melody (Best for Vocals)":
+            self.entry_hf_model.delete(0, "end")
+            self.entry_hf_model.insert(0, "facebook/musicgen-melody")
+        elif choice == "MusicGen Large (High Quality)":
+            self.entry_hf_model.delete(0, "end")
+            self.entry_hf_model.insert(0, "facebook/musicgen-large")
+        elif choice == "MusicGen Small (Fast)":
+            self.entry_hf_model.delete(0, "end")
+            self.entry_hf_model.insert(0, "facebook/musicgen-small")
 
     def test_llm_connection(self):
         self.lbl_llm_status.configure(text="Testing...", text_color="yellow")
-        # Basic validation logic (will be expanded later)
         keys = self.txt_llm_keys.get("0.0", "end").strip().split('\n')
         if keys and keys[0]:
             self.lbl_llm_status.configure(text="✅ Connection Successful (Key 1)", text_color="#28a745")
@@ -212,7 +231,9 @@ class AuraSyncStudio(ctk.CTk):
             "provider": self.combo_provider.get(),
             "base_url": self.entry_base_url.get(),
             "model_name": self.entry_model.get(),
-            "hf_keys": self.txt_hf_keys.get("0.0", "end").strip()
+            "hf_keys": self.txt_hf_keys.get("0.0", "end").strip(),
+            "hf_preset": self.combo_hf_model.get(),
+            "hf_model_id": self.entry_hf_model.get()
         }
         with open(CONFIG_FILE, "w") as f:
             json.dump(data, f)
@@ -227,6 +248,8 @@ class AuraSyncStudio(ctk.CTk):
                 self.entry_base_url.insert(0, data.get("base_url", ""))
                 self.entry_model.insert(0, data.get("model_name", ""))
                 self.txt_hf_keys.insert("0.0", data.get("hf_keys", ""))
+                self.combo_hf_model.set(data.get("hf_preset", "MusicGen Melody (Best for Vocals)"))
+                self.entry_hf_model.insert(0, data.get("hf_model_id", "facebook/musicgen-melody"))
 
     # --- GENERATION LOGIC ---
     def start_generation(self):
@@ -244,7 +267,6 @@ class AuraSyncStudio(ctk.CTk):
             with open(CONFIG_FILE, "r") as f:
                 keys_data = json.load(f)
 
-            # Get the first key from the pool
             llm_keys = keys_data.get("llm_keys", "").split('\n')
             api_key = llm_keys[0].strip() if llm_keys else ""
             
