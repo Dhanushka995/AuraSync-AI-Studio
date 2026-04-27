@@ -88,7 +88,6 @@ class AuraSyncStudio(ctk.CTk):
         ctk.CTkLabel(self.right_frame, text="Stereo Widener:").pack(anchor="w", padx=20, pady=(5, 0))
         ctk.CTkSlider(self.right_frame).pack(padx=20, pady=5, fill="x")
 
-        # API Settings Button - Now it works!
         self.btn_api = ctk.CTkButton(self.right_frame, text="⚙️ API Settings", fg_color="transparent", border_width=1, text_color="white", command=self.open_api_settings)
         self.btn_api.pack(side="bottom", padx=20, pady=20, fill="x")
 
@@ -106,36 +105,43 @@ class AuraSyncStudio(ctk.CTk):
         self.btn_generate = ctk.CTkButton(self.bottom_frame, text="🔥 GENERATE MASTERPIECE", font=ctk.CTkFont(size=16, weight="bold"), height=45, fg_color="#d9534f", hover_color="#c9302c")
         self.btn_generate.pack(side="right", padx=20, pady=15)
 
-    # --- NEW: API Settings Logic ---
+    # --- UPDATED: Multi-Provider API Settings Logic ---
     def open_api_settings(self):
         api_window = ctk.CTkToplevel(self)
         api_window.title("API Configuration")
-        api_window.geometry("500x350")
-        api_window.attributes("-topmost", True) # Keep on top
+        api_window.geometry("550x400")
+        api_window.attributes("-topmost", True)
 
         ctk.CTkLabel(api_window, text="Connect AI Models", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=15)
 
-        # Hugging Face Key
-        ctk.CTkLabel(api_window, text="Hugging Face API Key (For MusicGen):").pack(anchor="w", padx=20)
-        hf_entry = ctk.CTkEntry(api_window, width=460, show="*")
+        # 1. Hugging Face Key (Mandatory for MusicGen)
+        ctk.CTkLabel(api_window, text="Hugging Face API Key (For Music Generation):").pack(anchor="w", padx=20)
+        hf_entry = ctk.CTkEntry(api_window, width=500, show="*")
         hf_entry.pack(padx=20, pady=5)
 
-        # OpenRouter Key
-        ctk.CTkLabel(api_window, text="OpenRouter API Key (For Prompt Magic):").pack(anchor="w", padx=20, pady=(10,0))
-        or_entry = ctk.CTkEntry(api_window, width=460, show="*")
-        or_entry.pack(padx=20, pady=5)
+        # 2. Select LLM Provider (For Magic Prompt)
+        ctk.CTkLabel(api_window, text="Select AI Brain (For Magic Prompt):").pack(anchor="w", padx=20, pady=(15,0))
+        provider_combo = ctk.CTkComboBox(api_window, width=500, values=["Groq (Fastest)", "NVIDIA Build (High Quality)", "Google Gemini (High Limits)", "OpenRouter (Multi-Model)"])
+        provider_combo.pack(padx=20, pady=5)
+
+        # 3. LLM Provider Key
+        ctk.CTkLabel(api_window, text="Provider API Key:").pack(anchor="w", padx=20, pady=(10,0))
+        llm_entry = ctk.CTkEntry(api_window, width=500, show="*")
+        llm_entry.pack(padx=20, pady=5)
 
         # Load existing keys if available
         if os.path.exists(CONFIG_FILE):
             with open(CONFIG_FILE, "r") as f:
                 data = json.load(f)
                 hf_entry.insert(0, data.get("huggingface", ""))
-                or_entry.insert(0, data.get("openrouter", ""))
+                provider_combo.set(data.get("llm_provider", "Groq (Fastest)"))
+                llm_entry.insert(0, data.get("llm_key", ""))
 
         def save_keys():
             keys = {
                 "huggingface": hf_entry.get(),
-                "openrouter": or_entry.get()
+                "llm_provider": provider_combo.get(),
+                "llm_key": llm_entry.get()
             }
             with open(CONFIG_FILE, "w") as f:
                 json.dump(keys, f)
