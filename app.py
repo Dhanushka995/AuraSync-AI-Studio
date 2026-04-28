@@ -5,18 +5,23 @@ import os
 import requests
 import threading
 
+try:
+    from gradio_client import Client
+except ImportError:
+    Client = None
+
 # --- Theme Settings ---
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 CONFIG_FILE = "api_config.json"
-APP_VERSION = "v1.1" # Version Tracking
+APP_VERSION = "v1.2"
 
 class AuraSyncStudio(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title(f"AuraSync AI Studio {APP_VERSION} - Professional Music Remaker")
+        self.title(f"AuraSync AI Studio ({APP_VERSION}) - Professional Music Remaker")
         self.geometry("1200x800")
         self.minsize(1000, 700)
 
@@ -113,14 +118,14 @@ class AuraSyncStudio(ctk.CTk):
     def open_api_settings(self):
         api_window = ctk.CTkToplevel(self)
         api_window.title(f"Pro API Configuration ({APP_VERSION})")
-        api_window.geometry("650x600")
+        api_window.geometry("650x550")
         api_window.attributes("-topmost", True)
 
-        tabview = ctk.CTkTabview(api_window, width=600, height=500)
+        tabview = ctk.CTkTabview(api_window, width=600, height=450)
         tabview.pack(padx=20, pady=10, fill="both", expand=True)
 
         tab_llm = tabview.add("🧠 LLM (Magic Prompt)")
-        tab_hf = tabview.add("🎸 Audio (Hugging Face)")
+        tab_hf = tabview.add("🎸 Audio (HF Spaces)")
 
         # --- LLM TAB ---
         ctk.CTkLabel(tab_llm, text="API Key Pool (Paste multiple keys, one per line):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
@@ -148,30 +153,19 @@ class AuraSyncStudio(ctk.CTk):
         btn_test_llm = ctk.CTkButton(tab_llm, text="🔌 Test Connection", fg_color="#1f538d", command=self.test_llm_connection)
         btn_test_llm.pack(pady=10)
 
-        # --- HUGGING FACE TAB ---
-        ctk.CTkLabel(tab_hf, text="Hugging Face Token Pool (For MusicGen):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        # --- HUGGING FACE SPACES TAB (v1.2 UPGRADE) ---
+        ctk.CTkLabel(tab_hf, text="Hugging Face Token (Optional - Bypasses Queue):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
         self.txt_hf_keys = ctk.CTkTextbox(tab_hf, height=80)
         self.txt_hf_keys.pack(padx=10, pady=5, fill="x")
 
-        self.lbl_hf_status = ctk.CTkLabel(tab_hf, text="Waiting for Tokens...", text_color="orange", font=ctk.CTkFont(weight="bold"))
+        self.lbl_hf_status = ctk.CTkLabel(tab_hf, text="Waiting for Connection...", text_color="orange", font=ctk.CTkFont(weight="bold"))
         self.lbl_hf_status.pack(pady=5)
 
-        ctk.CTkLabel(tab_hf, text="Audio Model Preset:").pack(anchor="w", padx=10, pady=(5, 0))
-        self.combo_hf_model = ctk.CTkComboBox(tab_hf, values=["MusicGen Melody (Best for Vocals)", "MusicGen Large (High Quality)", "MusicGen Small (Fast)", "Custom Model ID"], command=self.on_hf_model_change)
-        self.combo_hf_model.pack(padx=10, pady=5, fill="x")
+        ctk.CTkLabel(tab_hf, text="Gradio Space ID (MusicGen):").pack(anchor="w", padx=10, pady=(5, 0))
+        self.entry_hf_model = ctk.CTkEntry(tab_hf, width=400)
+        self.entry_hf_model.pack(padx=10, pady=5, fill="x")
 
-        self.frame_hf_custom = ctk.CTkFrame(tab_hf, fg_color="transparent")
-        self.frame_hf_custom.pack(padx=10, pady=5, fill="x")
-        
-        ctk.CTkLabel(self.frame_hf_custom, text="Base URL:").grid(row=0, column=0, sticky="w", pady=5)
-        self.entry_hf_base_url = ctk.CTkEntry(self.frame_hf_custom, width=400)
-        self.entry_hf_base_url.grid(row=0, column=1, padx=10, pady=5)
-
-        ctk.CTkLabel(self.frame_hf_custom, text="Model Name:").grid(row=1, column=0, sticky="w", pady=5)
-        self.entry_hf_model = ctk.CTkEntry(self.frame_hf_custom, width=400)
-        self.entry_hf_model.grid(row=1, column=1, padx=10, pady=5)
-
-        btn_test_hf = ctk.CTkButton(tab_hf, text="🔌 Test HF Connection", fg_color="#1f538d", command=self.test_hf_connection)
+        btn_test_hf = ctk.CTkButton(tab_hf, text="🔌 Test Space Connection", fg_color="#1f538d", command=self.test_hf_connection)
         btn_test_hf.pack(pady=10)
 
         # Save Button
@@ -188,25 +182,12 @@ class AuraSyncStudio(ctk.CTk):
             self.entry_model.insert(0, "llama3-8b-8192")
         elif choice == "NVIDIA Build":
             self.entry_base_url.insert(0, "https://integrate.api.nvidia.com/v1/chat/completions")
-            # Updated to the correct 3.1 model to fix Error 410
             self.entry_model.insert(0, "meta/llama-3.1-8b-instruct")
         elif choice == "OpenRouter":
             self.entry_base_url.insert(0, "https://openrouter.ai/api/v1/chat/completions")
             self.entry_model.insert(0, "meta-llama/llama-3-8b-instruct:free")
 
-    def on_hf_model_change(self, choice):
-        self.entry_hf_base_url.delete(0, "end")
-        self.entry_hf_base_url.insert(0, "https://api-inference.huggingface.co/models/")
-        
-        self.entry_hf_model.delete(0, "end")
-        if choice == "MusicGen Melody (Best for Vocals)":
-            self.entry_hf_model.insert(0, "facebook/musicgen-melody")
-        elif choice == "MusicGen Large (High Quality)":
-            self.entry_hf_model.insert(0, "facebook/musicgen-large")
-        elif choice == "MusicGen Small (Fast)":
-            self.entry_hf_model.insert(0, "facebook/musicgen-small")
-
-    # --- REAL API TESTING LOGIC (v1.1 FIXES) ---
+    # --- REAL API TESTING LOGIC ---
     def test_llm_connection(self):
         self.lbl_llm_status.configure(text="Testing Connection... Please wait.", text_color="yellow")
         threading.Thread(target=self._run_llm_test).start()
@@ -238,30 +219,20 @@ class AuraSyncStudio(ctk.CTk):
         threading.Thread(target=self._run_hf_test).start()
 
     def _run_hf_test(self):
-        keys = self.txt_hf_keys.get("0.0", "end").strip().split('\n')
-        api_key = keys[0].strip() if keys else ""
-        if not api_key:
-            self.lbl_hf_status.configure(text="❌ Error: No Token Found", text_color="red")
+        if Client is None:
+            self.lbl_hf_status.configure(text="❌ Error: 'gradio_client' library missing! Add to requirements.txt", text_color="red")
             return
-        
-        base_url = self.entry_hf_base_url.get().rstrip('/')
-        model_id = self.entry_hf_model.get().lstrip('/')
-        url = f"{base_url}/{model_id}"
-        
-        headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
-        # FIX: Hugging Face requires POST request for inference testing
-        payload = {"inputs": "test"}
+            
+        keys = self.txt_hf_keys.get("0.0", "end").strip().split('\n')
+        api_key = keys[0].strip() if keys else None
+        space_id = self.entry_hf_model.get().strip()
         
         try:
-            response = requests.post(url, headers=headers, json=payload, timeout=10)
-            # 200 = OK, 503 = Loading, 400/422 = Bad Request (but means model exists and token is valid)
-            if response.status_code in[200, 503, 400, 422]:
-                status_msg = "✅ HF Token Valid & Model Ready!" if response.status_code == 200 else "✅ Token Valid (Model is loading/ready)"
-                self.lbl_hf_status.configure(text=status_msg, text_color="#28a745")
-            else:
-                self.lbl_hf_status.configure(text=f"❌ API Error: {response.status_code} - Check Token or Model", text_color="red")
+            # Connect to the Hugging Face Space
+            client = Client(space_id, hf_token=api_key if api_key else None)
+            self.lbl_hf_status.configure(text=f"✅ Connected to Space: {space_id}!", text_color="#28a745")
         except Exception as e:
-            self.lbl_hf_status.configure(text="❌ Network Error: Check Base URL", text_color="red")
+            self.lbl_hf_status.configure(text=f"❌ Connection Failed: Check Space ID or Token", text_color="red")
 
     def save_api_settings(self, window):
         data = {
@@ -270,8 +241,6 @@ class AuraSyncStudio(ctk.CTk):
             "base_url": self.entry_base_url.get(),
             "model_name": self.entry_model.get(),
             "hf_keys": self.txt_hf_keys.get("0.0", "end").strip(),
-            "hf_preset": self.combo_hf_model.get(),
-            "hf_base_url": self.entry_hf_base_url.get(),
             "hf_model_id": self.entry_hf_model.get()
         }
         with open(CONFIG_FILE, "w") as f:
@@ -292,16 +261,12 @@ class AuraSyncStudio(ctk.CTk):
                 self.entry_model.insert(0, data.get("model_name", ""))
                 
                 self.txt_hf_keys.insert("0.0", data.get("hf_keys", ""))
-                self.combo_hf_model.set(data.get("hf_preset", "MusicGen Melody (Best for Vocals)"))
                 
-                self.entry_hf_base_url.delete(0, "end")
-                self.entry_hf_base_url.insert(0, data.get("hf_base_url", "https://api-inference.huggingface.co/models/"))
-
                 self.entry_hf_model.delete(0, "end")
-                self.entry_hf_model.insert(0, data.get("hf_model_id", "facebook/musicgen-melody"))
+                self.entry_hf_model.insert(0, data.get("hf_model_id", "facebook/MusicGen"))
         else:
             self.on_provider_change("Groq")
-            self.on_hf_model_change("MusicGen Melody (Best for Vocals)")
+            self.entry_hf_model.insert(0, "facebook/MusicGen")
 
     # --- GENERATION LOGIC ---
     def start_generation(self):
