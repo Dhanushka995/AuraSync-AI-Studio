@@ -6,16 +6,16 @@ import requests
 import threading
 
 try:
-    from gradio_client import Client
+    import replicate
 except ImportError:
-    Client = None
+    replicate = None
 
 # --- Theme Settings ---
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 CONFIG_FILE = "api_config.json"
-APP_VERSION = "v1.2"
+APP_VERSION = "v1.3"
 
 class AuraSyncStudio(ctk.CTk):
     def __init__(self):
@@ -125,7 +125,7 @@ class AuraSyncStudio(ctk.CTk):
         tabview.pack(padx=20, pady=10, fill="both", expand=True)
 
         tab_llm = tabview.add("🧠 LLM (Magic Prompt)")
-        tab_hf = tabview.add("🎸 Audio (HF Spaces)")
+        tab_audio = tabview.add("🎸 Audio (Replicate API)")
 
         # --- LLM TAB ---
         ctk.CTkLabel(tab_llm, text="API Key Pool (Paste multiple keys, one per line):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
@@ -153,20 +153,20 @@ class AuraSyncStudio(ctk.CTk):
         btn_test_llm = ctk.CTkButton(tab_llm, text="🔌 Test Connection", fg_color="#1f538d", command=self.test_llm_connection)
         btn_test_llm.pack(pady=10)
 
-        # --- HUGGING FACE SPACES TAB (v1.2 UPGRADE) ---
-        ctk.CTkLabel(tab_hf, text="Hugging Face Token (Optional - Bypasses Queue):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
-        self.txt_hf_keys = ctk.CTkTextbox(tab_hf, height=80)
-        self.txt_hf_keys.pack(padx=10, pady=5, fill="x")
+        # --- AUDIO TAB (REPLICATE) ---
+        ctk.CTkLabel(tab_audio, text="Replicate API Token (For MusicGen):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
+        self.txt_audio_keys = ctk.CTkTextbox(tab_audio, height=80)
+        self.txt_audio_keys.pack(padx=10, pady=5, fill="x")
 
-        self.lbl_hf_status = ctk.CTkLabel(tab_hf, text="Waiting for Connection...", text_color="orange", font=ctk.CTkFont(weight="bold"))
-        self.lbl_hf_status.pack(pady=5)
+        self.lbl_audio_status = ctk.CTkLabel(tab_audio, text="Waiting for Token...", text_color="orange", font=ctk.CTkFont(weight="bold"))
+        self.lbl_audio_status.pack(pady=5)
 
-        ctk.CTkLabel(tab_hf, text="Gradio Space ID (MusicGen):").pack(anchor="w", padx=10, pady=(5, 0))
-        self.entry_hf_model = ctk.CTkEntry(tab_hf, width=400)
-        self.entry_hf_model.pack(padx=10, pady=5, fill="x")
+        ctk.CTkLabel(tab_audio, text="MusicGen Model Version:").pack(anchor="w", padx=10, pady=(5, 0))
+        self.entry_audio_model = ctk.CTkEntry(tab_audio, width=400)
+        self.entry_audio_model.pack(padx=10, pady=5, fill="x")
 
-        btn_test_hf = ctk.CTkButton(tab_hf, text="🔌 Test Space Connection", fg_color="#1f538d", command=self.test_hf_connection)
-        btn_test_hf.pack(pady=10)
+        btn_test_audio = ctk.CTkButton(tab_audio, text="🔌 Test Replicate Connection", fg_color="#1f538d", command=self.test_audio_connection)
+        btn_test_audio.pack(pady=10)
 
         # Save Button
         ctk.CTkButton(api_window, text="💾 Save All Settings", fg_color="#28a745", hover_color="#218838", height=40, command=lambda: self.save_api_settings(api_window)).pack(pady=10)
@@ -214,25 +214,35 @@ class AuraSyncStudio(ctk.CTk):
         except Exception as e:
             self.lbl_llm_status.configure(text="❌ Network Error: Check Base URL", text_color="red")
 
-    def test_hf_connection(self):
-        self.lbl_hf_status.configure(text="Testing Connection... Please wait.", text_color="yellow")
-        threading.Thread(target=self._run_hf_test).start()
+    def test_audio_connection(self):
+        self.lbl_audio_status.configure(text="Testing Connection... Please wait.", text_color="yellow")
+        threading.Thread(target=self._run_audio_test).start()
 
-    def _run_hf_test(self):
-        if Client is None:
-            self.lbl_hf_status.configure(text="❌ Error: 'gradio_client' library missing! Add to requirements.txt", text_color="red")
+    def _run_audio_test(self):
+        if replicate is None:
+            self.lbl_audio_status.configure(text="❌ Error: 'replicate' library missing! Add to requirements.txt", text_color="red")
             return
             
-        keys = self.txt_hf_keys.get("0.0", "end").strip().split('\n')
-        api_key = keys[0].strip() if keys else None
-        space_id = self.entry_hf_model.get().strip()
+        keys = self.txt_audio_keys.get("0.0", "end").strip().split('\n')
+        api_key = keys[0].strip() if keys else ""
+        
+        if not api_key:
+            self.lbl_audio_status.configure(text="❌ Error: No Token Found", text_color="red")
+            return
+            
+        os.environ["REPLICATE_API_TOKEN"] = api_key
         
         try:
-            # Connect to the Hugging Face Space
-            client = Client(space_id, hf_token=api_key if api_key else None)
-            self.lbl_hf_status.configure(text=f"✅ Connected to Space: {space_id}!", text_color="#28a745")
+            # Just a simple API call to check if the token is valid
+            headers = {"Authorization": f"Token {api_key}"}
+            response = requests.get("https://api.replicate.com/v1/models/meta/musicgen", headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                self.lbl_audio_status.configure(text="✅ Replicate Token Valid & Ready!", text_color="#28a745")
+            else:
+                self.lbl_audio_status.configure(text=f"❌ API Error: {response.status_code} - Check Token", text_color="red")
         except Exception as e:
-            self.lbl_hf_status.configure(text=f"❌ Connection Failed: Check Space ID or Token", text_color="red")
+            self.lbl_audio_status.configure(text="❌ Network Error", text_color="red")
 
     def save_api_settings(self, window):
         data = {
@@ -240,8 +250,8 @@ class AuraSyncStudio(ctk.CTk):
             "provider": self.combo_provider.get(),
             "base_url": self.entry_base_url.get(),
             "model_name": self.entry_model.get(),
-            "hf_keys": self.txt_hf_keys.get("0.0", "end").strip(),
-            "hf_model_id": self.entry_hf_model.get()
+            "audio_keys": self.txt_audio_keys.get("0.0", "end").strip(),
+            "audio_model_id": self.entry_audio_model.get()
         }
         with open(CONFIG_FILE, "w") as f:
             json.dump(data, f)
@@ -260,13 +270,13 @@ class AuraSyncStudio(ctk.CTk):
                 self.entry_model.delete(0, "end")
                 self.entry_model.insert(0, data.get("model_name", ""))
                 
-                self.txt_hf_keys.insert("0.0", data.get("hf_keys", ""))
+                self.txt_audio_keys.insert("0.0", data.get("audio_keys", ""))
                 
-                self.entry_hf_model.delete(0, "end")
-                self.entry_hf_model.insert(0, data.get("hf_model_id", "facebook/MusicGen"))
+                self.entry_audio_model.delete(0, "end")
+                self.entry_audio_model.insert(0, data.get("audio_model_id", "meta/musicgen:7a76a8258b23fae65c5a22debb88e5d2d7e81618e4d4cb711878d1d327142b96"))
         else:
             self.on_provider_change("Groq")
-            self.entry_hf_model.insert(0, "facebook/MusicGen")
+            self.entry_audio_model.insert(0, "meta/musicgen:7a76a8258b23fae65c5a22debb88e5d2d7e81618e4d4cb711878d1d327142b96")
 
     # --- GENERATION LOGIC ---
     def start_generation(self):
