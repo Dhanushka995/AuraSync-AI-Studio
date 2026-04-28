@@ -5,17 +5,12 @@ import os
 import requests
 import threading
 
-try:
-    import replicate
-except ImportError:
-    replicate = None
-
 # --- Theme Settings ---
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 CONFIG_FILE = "api_config.json"
-APP_VERSION = "v1.3"
+APP_VERSION = "v1.4" # Updated Version
 
 class AuraSyncStudio(ctk.CTk):
     def __init__(self):
@@ -153,7 +148,7 @@ class AuraSyncStudio(ctk.CTk):
         btn_test_llm = ctk.CTkButton(tab_llm, text="🔌 Test Connection", fg_color="#1f538d", command=self.test_llm_connection)
         btn_test_llm.pack(pady=10)
 
-        # --- AUDIO TAB (REPLICATE) ---
+        # --- AUDIO TAB (REPLICATE - NO LIBRARY NEEDED) ---
         ctk.CTkLabel(tab_audio, text="Replicate API Token (For MusicGen):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
         self.txt_audio_keys = ctk.CTkTextbox(tab_audio, height=80)
         self.txt_audio_keys.pack(padx=10, pady=5, fill="x")
@@ -219,10 +214,6 @@ class AuraSyncStudio(ctk.CTk):
         threading.Thread(target=self._run_audio_test).start()
 
     def _run_audio_test(self):
-        if replicate is None:
-            self.lbl_audio_status.configure(text="❌ Error: 'replicate' library missing! Add to requirements.txt", text_color="red")
-            return
-            
         keys = self.txt_audio_keys.get("0.0", "end").strip().split('\n')
         api_key = keys[0].strip() if keys else ""
         
@@ -230,17 +221,21 @@ class AuraSyncStudio(ctk.CTk):
             self.lbl_audio_status.configure(text="❌ Error: No Token Found", text_color="red")
             return
             
-        os.environ["REPLICATE_API_TOKEN"] = api_key
-        
         try:
-            # Just a simple API call to check if the token is valid
-            headers = {"Authorization": f"Token {api_key}"}
+            # Using raw requests instead of replicate library
+            headers = {
+                "Authorization": f"Token {api_key}",
+                "Content-Type": "application/json"
+            }
+            # We check the models endpoint to see if the token is valid
             response = requests.get("https://api.replicate.com/v1/models/meta/musicgen", headers=headers, timeout=10)
             
             if response.status_code == 200:
                 self.lbl_audio_status.configure(text="✅ Replicate Token Valid & Ready!", text_color="#28a745")
+            elif response.status_code == 401:
+                self.lbl_audio_status.configure(text="❌ API Error: 401 - Invalid Token", text_color="red")
             else:
-                self.lbl_audio_status.configure(text=f"❌ API Error: {response.status_code} - Check Token", text_color="red")
+                self.lbl_audio_status.configure(text=f"❌ API Error: {response.status_code}", text_color="red")
         except Exception as e:
             self.lbl_audio_status.configure(text="❌ Network Error", text_color="red")
 
