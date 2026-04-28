@@ -3,4 +3,4 @@ requests
 pydub
 pygame
 pillow
-gradio_client
+replicate
