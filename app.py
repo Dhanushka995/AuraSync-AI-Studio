@@ -13,7 +13,7 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 CONFIG_FILE = "api_config.json"
-APP_VERSION = "v1.6" # The Ultimate Dynamic Version
+APP_VERSION = "v1.7" # Added Test Button & Fixed Replicate 422 Error
 
 class AuraSyncStudio(ctk.CTk):
     def __init__(self):
@@ -56,7 +56,6 @@ class AuraSyncStudio(ctk.CTk):
         self.txt_prompt.pack(padx=20, pady=5, fill="x")
         self.txt_prompt.insert("0.0", "EDM, heavy bass, club dance vibe")
 
-        # NEW: Separate Magic Prompt Button
         self.btn_magic = ctk.CTkButton(self.left_frame, text="✨ Create Magic Prompt", fg_color="#f0ad4e", hover_color="#ec971f", text_color="black", command=self.generate_magic_prompt_only)
         self.btn_magic.pack(padx=20, pady=10, fill="x")
 
@@ -167,7 +166,7 @@ class AuraSyncStudio(ctk.CTk):
         except Exception as e:
             self.update_status("Playback Error!", "red")
 
-    # --- PRO API SETTINGS (ULTIMATE DYNAMIC VERSION) ---
+    # --- PRO API SETTINGS ---
     def open_api_settings(self):
         api_window = ctk.CTkToplevel(self)
         api_window.title(f"Pro API Configuration ({APP_VERSION})")
@@ -206,7 +205,7 @@ class AuraSyncStudio(ctk.CTk):
         btn_test_llm = ctk.CTkButton(tab_llm, text="🔌 Test Connection", fg_color="#1f538d", command=self.test_llm_connection)
         btn_test_llm.pack(pady=10)
 
-        # --- AUDIO TAB (100% DYNAMIC) ---
+        # --- AUDIO TAB ---
         ctk.CTkLabel(tab_audio, text="Audio API Key (Replicate or HuggingFace):", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=10, pady=(10, 5))
         self.txt_audio_keys = ctk.CTkTextbox(tab_audio, height=60)
         self.txt_audio_keys.pack(padx=10, pady=5, fill="x")
@@ -226,6 +225,13 @@ class AuraSyncStudio(ctk.CTk):
         ctk.CTkLabel(tab_audio, text="Payload (JSON format - use <PROMPT> placeholder):").pack(anchor="w", padx=10, pady=(5, 0))
         self.txt_audio_payload = ctk.CTkTextbox(tab_audio, height=100)
         self.txt_audio_payload.pack(padx=10, pady=5, fill="x")
+
+        # NEW: Added Test Audio Connection Button back!
+        self.lbl_audio_status = ctk.CTkLabel(tab_audio, text="Waiting for Token...", text_color="orange", font=ctk.CTkFont(weight="bold"))
+        self.lbl_audio_status.pack(pady=5)
+
+        btn_test_audio = ctk.CTkButton(tab_audio, text="🔌 Test Audio Connection", fg_color="#1f538d", command=self.test_audio_connection)
+        btn_test_audio.pack(pady=5)
 
         # Save Button
         ctk.CTkButton(api_window, text="💾 Save All Settings", fg_color="#28a745", hover_color="#218838", height=40, command=lambda: self.save_api_settings(api_window)).pack(pady=10)
@@ -251,9 +257,10 @@ class AuraSyncStudio(ctk.CTk):
         self.txt_audio_payload.delete("0.0", "end")
 
         if choice == "Replicate (Polling)":
-            self.entry_audio_url.insert(0, "https://api.replicate.com/v1/predictions")
+            # FIX FOR 422 ERROR: Using the direct model endpoint instead of version hash
+            self.entry_audio_url.insert(0, "https://api.replicate.com/v1/models/meta/musicgen/predictions")
             self.txt_audio_headers.insert("0.0", '{\n  "Authorization": "Token <API_KEY>",\n  "Content-Type": "application/json"\n}')
-            self.txt_audio_payload.insert("0.0", '{\n  "version": "7a76a8258b23fae65c5a22debb88e5d2d7e81618e4d4cb711878d1d327142b96",\n  "input": {\n    "prompt": "<PROMPT>",\n    "duration": 8\n  }\n}')
+            self.txt_audio_payload.insert("0.0", '{\n  "input": {\n    "prompt": "<PROMPT>",\n    "model_version": "melody",\n    "duration": 8\n  }\n}')
         elif choice == "Direct (HuggingFace/Local)":
             self.entry_audio_url.insert(0, "https://api-inference.huggingface.co/models/facebook/musicgen-small")
             self.txt_audio_headers.insert("0.0", '{\n  "Authorization": "Bearer <API_KEY>",\n  "Content-Type": "application/json"\n}')
@@ -283,6 +290,38 @@ class AuraSyncStudio(ctk.CTk):
                 self.lbl_llm_status.configure(text=f"❌ API Error: {response.status_code}", text_color="red")
         except Exception as e:
             self.lbl_llm_status.configure(text="❌ Network Error", text_color="red")
+
+    def test_audio_connection(self):
+        self.lbl_audio_status.configure(text="Testing Connection... Please wait.", text_color="yellow")
+        threading.Thread(target=self._run_audio_test).start()
+
+    def _run_audio_test(self):
+        keys = self.txt_audio_keys.get("0.0", "end").strip().split('\n')
+        api_key = keys[0].strip() if keys else ""
+        if not api_key:
+            self.lbl_audio_status.configure(text="❌ Error: No Token Found", text_color="red")
+            return
+            
+        api_type = self.combo_audio_type.get()
+        
+        try:
+            if api_type == "Replicate (Polling)":
+                headers = {"Authorization": f"Token {api_key}"}
+                res = requests.get("https://api.replicate.com/v1/models/meta/musicgen", headers=headers, timeout=10)
+                if res.status_code == 200:
+                    self.lbl_audio_status.configure(text="✅ Replicate Token Valid!", text_color="#28a745")
+                else:
+                    self.lbl_audio_status.configure(text=f"❌ API Error: {res.status_code}", text_color="red")
+            else:
+                url = self.entry_audio_url.get()
+                headers = {"Authorization": f"Bearer {api_key}"}
+                res = requests.post(url, headers=headers, json={"inputs": "test"}, timeout=10)
+                if res.status_code in [200, 503, 400, 422]:
+                    self.lbl_audio_status.configure(text="✅ HF Token Valid!", text_color="#28a745")
+                else:
+                    self.lbl_audio_status.configure(text=f"❌ API Error: {res.status_code}", text_color="red")
+        except Exception as e:
+            self.lbl_audio_status.configure(text="❌ Network Error", text_color="red")
 
     def save_api_settings(self, window):
         data = {
@@ -318,7 +357,6 @@ class AuraSyncStudio(ctk.CTk):
             self.on_provider_change("Groq")
             self.on_audio_type_change("Replicate (Polling)")
 
-    # --- SEPARATE MAGIC PROMPT BUTTON LOGIC ---
     def generate_magic_prompt_only(self):
         self.btn_magic.configure(state="disabled", text="⏳ Creating...")
         self.update_status("[ Creating Magic Prompt... ]", "#f0ad4e")
@@ -342,8 +380,7 @@ class AuraSyncStudio(ctk.CTk):
             model = keys_data.get("model_name", "")
             user_prompt = self.txt_prompt.get("0.0", "end").strip()
             
-            # If it already has a magic prompt, don't re-magic it unless user wants to
-            if "✨ MAGIC PROMPT:" in user_prompt:
+            if "✨ MAGIC PROMPT:\n" in user_prompt:
                 user_prompt = user_prompt.replace("✨ MAGIC PROMPT:\n", "")
 
             genre = self.combo_genre.get()
@@ -368,8 +405,11 @@ class AuraSyncStudio(ctk.CTk):
         finally:
             self.btn_magic.configure(state="normal", text="✨ Create Magic Prompt")
 
-    # --- GENERATE MASTERPIECE LOGIC (DYNAMIC AUDIO) ---
     def start_generation(self):
+        if not self.uploaded_file_path:
+            self.update_status("Error: Please upload an original song first!", "red")
+            return
+
         self.btn_generate.configure(state="disabled", text="⏳ GENERATING...")
         self.progress.set(0.1)
         self.update_status("[ Starting Generation Process... ]", "#f0ad4e")
@@ -385,20 +425,16 @@ class AuraSyncStudio(ctk.CTk):
                 self.update_status("Error: Audio API Key is missing!", "red")
                 return
 
-            # Get the prompt from the box (remove the prefix if it exists)
             final_prompt = self.txt_prompt.get("0.0", "end").strip()
             if "✨ MAGIC PROMPT:\n" in final_prompt:
                 final_prompt = final_prompt.replace("✨ MAGIC PROMPT:\n", "")
 
-            # DYNAMIC PAYLOAD REPLACEMENT
             api_type = keys_data.get("audio_type", "")
             url = keys_data.get("audio_url", "")
             headers_str = keys_data.get("audio_headers", "")
             payload_str = keys_data.get("audio_payload", "")
 
-            # Replace placeholders
             headers_str = headers_str.replace("<API_KEY>", audio_key)
-            # Escape quotes in prompt to avoid breaking JSON
             safe_prompt = final_prompt.replace('"', '\\"').replace('\n', ' ')
             payload_str = payload_str.replace("<PROMPT>", safe_prompt)
 
@@ -414,12 +450,11 @@ class AuraSyncStudio(ctk.CTk):
 
             response = requests.post(url, headers=headers, json=payload)
             
-            if response.status_code not in [200, 201]:
+            if response.status_code not in[200, 201]:
                 self.update_status(f"Audio API Error: {response.status_code} - {response.text[:50]}", "red")
                 return
 
             if api_type == "Replicate (Polling)":
-                # Replicate specific polling logic
                 pred_url = response.json().get("urls", {}).get("get")
                 if not pred_url:
                     self.update_status("Error: Replicate didn't return a polling URL", "red")
@@ -440,7 +475,6 @@ class AuraSyncStudio(ctk.CTk):
                     self.update_status(f"[ Generating Music... Status: {status_data['status']} ]", "yellow")
 
             elif api_type == "Direct (HuggingFace/Local)":
-                # Hugging Face returns the audio file directly
                 temp_file = "temp_output.wav"
                 with open(temp_file, "wb") as f:
                     f.write(response.content)
